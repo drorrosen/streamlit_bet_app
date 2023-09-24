@@ -158,8 +158,8 @@ if clicked:
             profits.append(profit)
         plot_simulation_profits(profits)
         st.write(f"The profit average over 1000 simulations is: {np.round(np.mean(profits),2)}")
-        st.write(f"The profit median over 1000 simulations is: {np.round(np.std(profits),2)}")
-        st.write(f"The profit standard deviation over 1000 simulations is: {np.round(np.median(profits),2)}")
+        st.write(f"The profit median over 1000 simulations is: {np.round(np.median(profits),2)}")
+        st.write(f"The profit standard deviation over 1000 simulations is: {np.round(np.std(profits),2)}")
 
         var, cvar = BettingBacktest.calculate_risk_metrics(profits)
 
