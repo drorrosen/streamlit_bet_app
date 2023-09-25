@@ -2,5 +2,4 @@ plotly
 streamlit
 pandas
 openpyxl
-io
 xlsxwriter
