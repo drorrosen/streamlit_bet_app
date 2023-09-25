@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from lab_simulation import *
+import io
+import xlsxwriter
 
 
 # Set page configuration to wide layout
@@ -16,13 +18,13 @@ if uploaded_file:
         import pandas as pd
 
         df = pd.read_csv(uploaded_file)
-        if st.checkbox('Show data:'):
+        if st.checkbox('Show original data:'):
             st.write(df)
 
     else:
         import pandas as pd
         df = pd.read_excel(uploaded_file)
-        if st.checkbox('Show data:'):
+        if st.checkbox('Show original data:'):
             st.write(df)
 
 st.sidebar.header('User Input Parameters')
@@ -32,9 +34,7 @@ st.divider()
 
 
 if uploaded_file:
-    bt = BettingBacktest(df)
-    loss_streaks = bt.count_Loss_streaks()
-    plot_loss_streaks(loss_streaks)
+
 
 
     def user_input_features():
@@ -63,7 +63,7 @@ if uploaded_file:
                'odds':odds}
 
 st.divider()
-
+st.subheader('Run Simulations and backtesting to provide with more statistics')
 clicked = st.button('Begin Simulation and Backtesting:')
 if clicked:
     if uploaded_file:
@@ -89,7 +89,33 @@ if clicked:
         st.write(f"The Conditional Value-at-Risk (VaR) is: {np.round(cvar,2)}")
 
 
-else:
-        st.write("You didn't upload a dataset")
-
 st.divider()
+
+st.subheader('Running Backtesting and creating a file to download')
+
+if uploaded_file:
+    clicked = st.button('Begin Backtesting and creating downloaded file')
+    if clicked:
+        bt = BettingBacktest(df)
+        if results['odds'] != 'odds_from_file':
+            bt.df['Odds'] = results['odds']
+        result = bt.backtest_sequence_xyz(results['sequence'], results['stake'])
+        bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stakes', 'PL']]
+        st.write(bt.df)
+        st.write('Total PL: ', np.round(bt.df['PL'].sum(),2))
+
+        # Create a download button
+
+        # Write the DataFrame to a BytesIO object
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            bt.df.to_excel(writer, sheet_name='Sheet1', index=False)
+            writer.save()
+
+        st.download_button(
+            label="Download Excel File",
+            data=output,
+            file_name="my_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        )
