@@ -36,15 +36,6 @@ st.divider()
 if uploaded_file:
 
 
-
-    def user_input_features():
-        sequence = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
-        stake = st.sidebar.number_input('Enter base Stake:', value=10)
-
-        return sequence, stake
-
-    sequence_input, stake_input = user_input_features()
-
     st.subheader('User input parameters')
 
     odds_options = ['User input parameter', 'Data input']
@@ -56,11 +47,33 @@ if uploaded_file:
         odds = 'odds_from_file'
         st.write("Odds inputs from the file")
 
-    st.write(f'Chosen Stake:', stake_input)
-    st.write(f'Chosen Sequence: {sequence_input}')
+    stake_options = ['User input parameter', 'Data input']
+    stake_bar = st.sidebar.radio('Choose Stakes', odds_options)
+    if stake_bar == 'User input parameter':
+        stake_input = st.sidebar.number_input('Stake')
+        st.write(f"Stake input:", stake_input)
+    else:
+        stake_input = 'stakes_from_file'
+        st.write("Stakes inputs from the file")
+
+    sequence_options = ['User input parameter', 'Data input']
+    sequence_bar = st.sidebar.radio('Choose Sequence', sequence_options)
+    if (sequence_bar == 'User input parameter'):
+        sequence_input = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
+        st.write(f"Sequence input:", sequence_input)
+    else:
+        if 'Sequence' in df.columns:
+            sequence_input = df.loc[0,'Sequence']
+            st.write("Sequence input from the file")
+        else:
+            sequence_input = st.sidebar.text_input('No Sequence column was found in the file. Enter Sequence here:', value="1,2,3,4,5,6")
+            st.write(f"Sequence input:", sequence_input)
+
+
+
     results = {'sequence':[float(seq) for seq in sequence_input.split(',')],
-               'stake':stake_input,
-               'odds':odds}
+                   'stake':stake_input,
+                   'odds':odds}
 
 st.divider()
 st.subheader('Run Simulations and backtesting to provide with more statistics')
@@ -68,15 +81,21 @@ clicked = st.button('Begin Simulation and Backtesting:')
 if clicked:
     if uploaded_file:
         #Bootstrapping and backtesting
-        if results['odds'] != 'odds_from_file':
-            df['Odds'] = results['odds']
 
         bt = BettingBacktest(df)
+
+        if results['odds'] != 'odds_from_file':
+            bt.df['Odds'] = results['odds']
+        if results['stake'] != 'stakes_from_file':
+            bt.df['Stake'] = results['stake']
+        bt.df['Stake'] = bt.df['Stake'].astype(float)
+
+
         bootstrapped_dfs = bt.bootstrap_data(num_samples=1000)
         profits = []
         for sample_df in bootstrapped_dfs:
             sample_bt = BettingBacktest(sample_df)
-            profit = sample_bt.backtest_sequence_xyz(results['sequence'], results['stake'])
+            profit = sample_bt.backtest_sequence_xyz(results['sequence'])
             profits.append(profit)
         plot_simulation_profits(profits)
         st.write(f"The profit average over 1000 simulations is: {np.round(np.mean(profits),2)}")
@@ -97,11 +116,18 @@ if uploaded_file:
     clicked = st.button('Begin Backtesting and creating downloaded file')
     if clicked:
         bt = BettingBacktest(df)
+
         if results['odds'] != 'odds_from_file':
             bt.df['Odds'] = results['odds']
-        result = bt.backtest_sequence_xyz(results['sequence'], results['stake'])
+        if results['stake'] != 'stakes_from_file':
+            bt.df['Stake'] = results['stake']
+        bt.df['Stake'] = bt.df['Stake'].astype(float)
+
+
+
+        result = bt.backtest_sequence_xyz(results['sequence'])
         bt.df['Stakes'] = results['stake']
-        bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stakes', 'Result','PL']]
+        bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stake','Result', 'PL']]
         st.write(bt.df)
         st.write('Total PL: ', np.round(bt.df['PL'].sum(),2))
 
@@ -111,6 +137,7 @@ if uploaded_file:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             bt.df.to_excel(writer, sheet_name='Sheet1', index=False)
+            writer.save()
 
         st.download_button(
             label="Download Excel File",
