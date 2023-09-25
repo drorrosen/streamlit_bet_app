@@ -130,7 +130,7 @@ if uploaded_file:
     odds_options = ['User input parameter', 'Data input']
     odds_bar = st.sidebar.radio('Choose Odds', odds_options)
     if odds_bar == 'User input parameter':
-        odds = st.sidebar.slider('Odds', 0.0,10.0,1.5,0.1)
+        odds = st.sidebar.slider('Odds', 0.0,200.0,1.5,0.1)
         st.write(f"Odds input:", odds)
     else:
         odds = 'odds_from_file'
