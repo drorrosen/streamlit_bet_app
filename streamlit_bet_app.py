@@ -110,7 +110,6 @@ if uploaded_file:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             bt.df.to_excel(writer, sheet_name='Sheet1', index=False)
-            writer.save()
 
         st.download_button(
             label="Download Excel File",
