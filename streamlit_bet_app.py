@@ -100,7 +100,7 @@ if uploaded_file:
         if results['odds'] != 'odds_from_file':
             bt.df['Odds'] = results['odds']
         result = bt.backtest_sequence_xyz(results['sequence'], results['stake'])
-        bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stakes', 'PL']]
+        bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stakes', 'Result','PL']]
         st.write(bt.df)
         st.write('Total PL: ', np.round(bt.df['PL'].sum(),2))
 
