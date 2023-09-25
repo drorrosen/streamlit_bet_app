@@ -1,88 +1,7 @@
-#import streamlit as st
-#import pandas as pd
-#from lab_simulation import *
-
-import pandas as pd
-import numpy as np
 import streamlit as st
+import pandas as pd
+from lab_simulation import *
 
-import plotly.express as px
-
-
-class BettingBacktest:
-    def __init__(self, df):
-        self.df = df.dropna(subset=['Odds', 'Result'])
-
-    def count_Loss_streaks(self):
-        loss_streaks = {}
-        streak_count = 0
-        for result in self.df['Result']:
-            if result == 'Lost':
-                streak_count += 1
-            else:
-                if streak_count >0:
-                    loss_streaks[streak_count] = loss_streaks.get(streak_count,0) + 1
-                streak_count = 0
-        return loss_streaks
-
-    def backtest_sequence_xyz(self, sequence):
-        total_profit = 0
-        seq_idx = 0
-        for _, row in self.df.iterrows():
-            stake = sequence[seq_idx]
-            if row['Result'] == 'Won':
-                profit = stake * (row['Odds'] - 1)
-            else:
-                profit = -stake
-            total_profit += profit
-            if row['Result'] == 'Won':
-                seq_idx = 0
-            else:
-                seq_idx = min(len(sequence) -1, seq_idx+1)
-        return total_profit
-
-    def bootstrap_data(self, num_samples=100):
-        bootstrapped_samples = []
-        for _ in range(num_samples):
-            sample_df = self.df.sample(n=len(self.df), replace=True).reset_index(drop=True)
-            bootstrapped_samples.append(sample_df)
-        return bootstrapped_samples
-
-    @staticmethod
-    def calculate_risk_metrics(profits, confidence_level=0.95):
-        sorted_profits = sorted(profits)
-        var_index = int((1 - confidence_level) * len(sorted_profits))
-        var_value = sorted_profits[var_index]
-        cvar_value = np.mean(sorted_profits[:var_index+1])
-        return var_value, cvar_value
-
-
-def plot_loss_streaks(loss_streaks):
-    df_loss_streaks = pd.DataFrame(list(loss_streaks.items()), columns=['Streak Length', 'Frequency'])
-    fig = px.bar(df_loss_streaks, x='Streak Length', y='Frequency')
-    fig.update_layout(
-        title_text='Lossing streaks',
-        xaxis_title='Streak Length',
-        yaxis_title='Frequency',
-        xaxis=dict(tickfont=dict(size=14)),
-        yaxis=dict(tickfont=dict(size=14))
-    )
-
-    # Show plot using Streamlit
-    st.plotly_chart(fig)
-
-def plot_simulation_profits(profits):
-    fig = px.histogram(profits)
-    fig.update_layout(
-        title_text='Distribution of Bootstrapped Simulation Profits',
-        xaxis_title='Total Profit',
-        yaxis_title='Frequency',
-        xaxis=dict(tickfont=dict(size=14)),
-        yaxis=dict(tickfont=dict(size=14))
-    )
-
-    # Show plot using Streamlit
-    st.plotly_chart(fig)
 
 # Set page configuration to wide layout
 st.set_page_config(layout="wide")
@@ -120,10 +39,11 @@ if uploaded_file:
 
     def user_input_features():
         sequence = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
+        stake = st.sidebar.number_input('Enter base Stake:', value=10)
 
-        return sequence
+        return sequence, stake
 
-    sequence_input = user_input_features()
+    sequence_input, stake_input = user_input_features()
 
     st.subheader('User input parameters')
 
@@ -136,8 +56,10 @@ if uploaded_file:
         odds = 'odds_from_file'
         st.write("Odds inputs from the file")
 
+    st.write(f'Chosen Stake:', stake_input)
     st.write(f'Chosen Sequence: {sequence_input}')
     results = {'sequence':[float(seq) for seq in sequence_input.split(',')],
+               'stake':stake_input,
                'odds':odds}
 
 st.divider()
@@ -154,7 +76,7 @@ if clicked:
         profits = []
         for sample_df in bootstrapped_dfs:
             sample_bt = BettingBacktest(sample_df)
-            profit = sample_bt.backtest_sequence_xyz(results['sequence'])
+            profit = sample_bt.backtest_sequence_xyz(results['sequence'], results['stake'])
             profits.append(profit)
         plot_simulation_profits(profits)
         st.write(f"The profit average over 1000 simulations is: {np.round(np.mean(profits),2)}")
