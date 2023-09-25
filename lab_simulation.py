@@ -20,20 +20,20 @@ class BettingBacktest:
                 streak_count = 0
         return loss_streaks
 
-    def backtest_sequence_xyz(self, sequence):
+    def backtest_sequence_xyz(self, sequence, stake):
         total_profit = 0
         seq_idx = 0
         for _, row in self.df.iterrows():
-            stake = sequence[seq_idx]
+            current_stake = stake * sequence[seq_idx]
             if row['Result'] == 'Won':
-                profit = stake * (row['Odds'] - 1)
-            else:
-                profit = -stake
-            total_profit += profit
-            if row['Result'] == 'Won':
+                profit = current_stake * (row['Odds'] - 1)
                 seq_idx = 0
             else:
+                profit = -current_stake
                 seq_idx = min(len(sequence) -1, seq_idx+1)
+
+            total_profit += profit
+
         return total_profit
 
     def bootstrap_data(self, num_samples=100):
