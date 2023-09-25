@@ -23,13 +23,23 @@ class BettingBacktest:
     def backtest_sequence_xyz(self, sequence, stake):
         total_profit = 0
         seq_idx = 0
-        for _, row in self.df.iterrows():
+
+        # Add new columns for Sequence, Stakes, and PL
+        self.df['Sequence'] = None
+        self.df['Stakes'] = None
+        self.df['PL'] = None
+
+        for idx, row in self.df.iterrows():
             current_stake = stake * sequence[seq_idx]
+            self.df.at[idx, 'Sequence'] = sequence[seq_idx]
+            self.df.at[idx, 'Stakes'] = current_stake
             if row['Result'] == 'Won':
                 profit = current_stake * (row['Odds'] - 1)
+                self.df.at[idx, 'PL'] = profit
                 seq_idx = 0
             else:
                 profit = -current_stake
+                self.df.at[idx, 'PL'] = profit
                 seq_idx = min(len(sequence) -1, seq_idx+1)
 
             total_profit += profit
