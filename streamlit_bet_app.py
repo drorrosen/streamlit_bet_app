@@ -47,14 +47,9 @@ if uploaded_file:
         odds = 'odds_from_file'
         st.write("Odds inputs from the file")
 
-    stake_options = ['User input parameter', 'Data input']
-    stake_bar = st.sidebar.radio('Choose Stakes', odds_options)
-    if stake_bar == 'User input parameter':
-        stake_input = st.sidebar.number_input('Stake')
-        st.write(f"Stake input:", stake_input)
-    else:
-        stake_input = 'stakes_from_file'
-        st.write("Stakes inputs from the file")
+    stake_input = st.sidebar.number_input('Stake')
+    st.write(f"Stake input:", stake_input)
+
 
     sequence_options = ['User input parameter', 'Data input']
     sequence_bar = st.sidebar.radio('Choose Sequence', sequence_options)
