@@ -127,7 +127,7 @@ if clicked:
         var, cvar = BettingBacktest.calculate_risk_metrics(profits)
 
         st.write(f"The Value-at-Risk (VaR) on the simulated profits is: {np.round(var,2)}")
-        st.write(f"The Conditional Value-at-Risk (VaR) is: {np.round(cvar,2)}")
+        st.write(f"The Conditional Value-at-Risk (CVaR) is: {np.round(cvar,2)}")
 
 
 st.divider()
