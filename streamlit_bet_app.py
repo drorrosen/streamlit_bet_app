@@ -19,13 +19,35 @@ if uploaded_file:
 
         df = pd.read_csv(uploaded_file)
         if st.checkbox('Show original data:'):
-            st.write(df)
+            # Convert the DataFrame to HTML and then render it with custom width and font size
+            st.markdown(df.to_html(classes='table table-striped', table_id='custom_table'), unsafe_allow_html=True)
+
+            # Add custom CSS to increase font-size
+            st.markdown("""
+            <style>
+            #custom_table {
+                font-size: 20px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+                        #st.write(df)
 
     else:
         import pandas as pd
         df = pd.read_excel(uploaded_file)
         if st.checkbox('Show original data:'):
-            st.write(df)
+            # Convert the DataFrame to HTML and then render it with custom width and font size
+            st.markdown(df.to_html(classes='table table-striped', table_id='custom_table'), unsafe_allow_html=True)
+
+            # Add custom CSS to increase font-size
+            st.markdown("""
+            <style>
+            #custom_table {
+                font-size: 20px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            #st.write(df)
 
     bt = BettingBacktest(df)
     counts_losses = bt.count_Loss_streaks()
