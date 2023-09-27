@@ -27,6 +27,11 @@ if uploaded_file:
         if st.checkbox('Show original data:'):
             st.write(df)
 
+    bt = BettingBacktest(df)
+    counts_losses = bt.count_Loss_streaks()
+    plot_loss_streaks(counts_losses)
+
+
 st.sidebar.header('User Input Parameters')
 
 
