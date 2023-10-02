@@ -5,6 +5,7 @@ import io
 import xlsxwriter
 
 
+
 # Set page configuration to wide layout
 st.set_page_config(layout="wide")
 
@@ -19,37 +20,27 @@ if uploaded_file:
 
         df = pd.read_csv(uploaded_file)
         if st.checkbox('Show original data:'):
-            # Convert the DataFrame to HTML and then render it with custom width and font size
-            st.markdown(df.to_html(classes='table table-striped', table_id='custom_table'), unsafe_allow_html=True)
+            st.dataframe(df)
 
-            # Add custom CSS to increase font-size
-            st.markdown("""
-            <style>
-            #custom_table {
-                font-size: 20px;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-                        #st.write(df)
 
     else:
         import pandas as pd
         df = pd.read_excel(uploaded_file)
         if st.checkbox('Show original data:'):
-            # Convert the DataFrame to HTML and then render it with custom width and font size
-            st.markdown(df.to_html(classes='table table-striped', table_id='custom_table'), unsafe_allow_html=True)
-
-            # Add custom CSS to increase font-size
-            st.markdown("""
-            <style>
-            #custom_table {
-                font-size: 20px;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            #st.write(df)
+            st.dataframe(df)
 
     bt = BettingBacktest(df)
+
+    columns_df = bt.df.columns
+    columns_df_lower = [col.lower() for col in columns_df]
+    if 'sequence' in columns_df_lower:
+        seq_idx = columns_df_lower.index('sequence')
+        sequence_input_data = bt.df.loc[bt.df[columns_df[seq_idx]].notnull(), columns_df[seq_idx]].iloc[0]
+        print(sequence_input_data)
+        st.write(f"Sequence input from the file:", sequence_input_data)
+    else:
+        sequence_input_data = None
+
     counts_losses = bt.count_Loss_streaks()
     plot_loss_streaks(counts_losses)
 
@@ -83,11 +74,12 @@ if uploaded_file:
     if (sequence_bar == 'User input parameter'):
         sequence_input = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
         st.write(f"Sequence input:", sequence_input)
+    elif sequence_input_data is not None:
+            sequence_input = sequence_input_data
+            st.write(f"Sequence input:", sequence_input)
+
+
     else:
-        if 'Sequence' in df.columns:
-            sequence_input = df.loc[0,'Sequence']
-            st.write("Sequence input from the file")
-        else:
             sequence_input = st.sidebar.text_input('No Sequence column was found in the file. Enter Sequence here:', value="1,2,3,4,5,6")
             st.write(f"Sequence input:", sequence_input)
 
@@ -127,7 +119,7 @@ if clicked:
         var, cvar = BettingBacktest.calculate_risk_metrics(profits)
 
         st.write(f"The Value-at-Risk (VaR) on the simulated profits is: {np.round(var,2)}")
-        st.write(f"The Conditional Value-at-Risk (CVaR) is: {np.round(cvar,2)}")
+        st.write(f"The Conditional Value-at-Risk (VaR) is: {np.round(cvar,2)}")
 
 
 st.divider()
