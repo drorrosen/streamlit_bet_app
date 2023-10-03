@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 import plotly.express as px
+import random
+from tqdm import tqdm
 
 
 class BettingBacktest:
@@ -88,3 +90,83 @@ def plot_simulation_profits(profits):
 
     # Show plot using Streamlit
     st.plotly_chart(fig)
+
+
+def generate_limited_random_sequence(min_length=3, max_length=15, value_ranges=[(1, 20), (25, 100, 5)]):
+    """
+    Generate a random sequence of integers within specified value ranges and varying length.
+    The first number in the sequence is always 1.
+
+    Parameters:
+    - min_length: Minimum length of the sequence
+    - max_length: Maximum length of the sequence
+    - value_ranges: List of tuples specifying the ranges for random values.
+                    Each tuple can be (min_value, max_value) or (min_value, max_value, step)
+
+    Returns:
+    A list of integers representing the sequence
+    """
+    # The first number in the sequence must be 1
+    sequence = [1]
+
+    # Determine the length of this sequence
+    sequence_length = random.randint(min_length, max_length)
+
+    # Generate the remaining numbers in the sequence
+    for _ in range(sequence_length - 1):
+        # Randomly pick a value range
+        value_range = random.choice(value_ranges)
+
+        if len(value_range) == 2:
+            # Generate a random value within this range
+            sequence.append(random.randint(value_range[0], value_range[1]))
+        else:
+            # Generate a random value within this range with the specified step
+            sequence.append(random.randrange(value_range[0], value_range[1] + 1, value_range[2]))
+
+    return sequence
+
+
+
+# Modify the hill climbing function to use the backtest_sequence_xyz method for evaluation
+def hill_climb_with_backtest(initial_sequence, iterations=10000, backtest_instance=None):
+    """
+    Perform hill climbing to find the sequence that maximizes profit using backtesting.
+
+    Parameters:
+    - initial_sequence: The initial betting sequence
+    - iterations: The number of iterations to perform
+    - backtest_instance: An instance of the BettingBacktest class for backtesting sequences
+
+    Returns:
+    The sequence that results in the highest profit according to backtesting
+    """
+    # Initialize variables
+    current_sequence = initial_sequence
+    best_profit = backtest_instance.backtest_sequence_xyz(current_sequence) if backtest_instance else 0
+
+    progress_text = st.empty()
+    # Perform hill climbing
+    for i in tqdm(range(iterations), desc='Processing'):
+        # Generate a neighbor by perturbing the current sequence
+        neighbor_sequence = current_sequence[:]
+        action = random.choice(["add", "remove", "change"])
+
+        if action == "add":
+            neighbor_sequence.append(random.randint(1, 100))
+        elif action == "remove" and len(neighbor_sequence) > 1:
+            del neighbor_sequence[random.randint(1, len(neighbor_sequence) - 1)]
+        elif action == "change" and len(neighbor_sequence) > 1:
+            neighbor_sequence[random.randint(1, len(neighbor_sequence) - 1)] = random.randint(1, 100)
+
+        # Evaluate the neighbor using backtest_sequence_xyz
+        neighbor_profit = backtest_instance.backtest_sequence_xyz(neighbor_sequence) if backtest_instance else 0
+
+        # If the neighbor is better, move to the neighbor state
+        if neighbor_profit > best_profit:
+            current_sequence = neighbor_sequence
+            best_profit = neighbor_profit
+
+        progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
+    return current_sequence, best_profit
+
