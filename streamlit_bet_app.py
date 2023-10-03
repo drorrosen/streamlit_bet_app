@@ -11,7 +11,7 @@ import random
 st.set_page_config(layout="wide")
 
 
-st.title('Sequence Testing App')
+st.title('OptimizeMyBet')
 
 #file uploader
 uploaded_file = st.sidebar.file_uploader('Upload a file:', type=['csv', 'xlsx'])
@@ -163,11 +163,11 @@ if uploaded_file:
 
 st.divider()
 
-st.subheader('Finding a recommended sequence')
+st.subheader('Backtesting Sequence Finder')
 
 
 if uploaded_file:
-    clicked = st.button('Find a recommended sequence')
+    clicked = st.button('OptimizeMyBet Sequence Finder')
     if clicked:
         bt = BettingBacktest(df)
         if results['odds'] != 'odds_from_file':
