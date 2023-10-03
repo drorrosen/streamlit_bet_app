@@ -3,6 +3,7 @@ import pandas as pd
 from lab_simulation import *
 import io
 import xlsxwriter
+import random
 
 
 
@@ -159,3 +160,29 @@ if uploaded_file:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
+st.divider()
+
+st.subheader('Finding a recommended sequence')
+
+
+if uploaded_file:
+    clicked = st.button('Find a recommended sequence')
+    if clicked:
+        bt = BettingBacktest(df)
+        if results['odds'] != 'odds_from_file':
+         bt.df['Odds'] = results['odds']
+        if results['stake'] != 'stakes_from_file':
+            bt.df['Stake'] = results['stake']
+            bt.df['Stake'] = bt.df['Stake'].astype(float)
+
+        # Initialize the progress bar
+        progress_bar = st.progress(0)
+        # Initialize a random sequence
+        initial_sequence = generate_limited_random_sequence()
+
+        # Perform hill climbing to find the best sequence using backtesting
+        best_sequence_backtest, best_profit_backtest = hill_climb_with_backtest(initial_sequence, backtest_instance=bt)
+
+        st.write(f"Best sequence:", best_sequence_backtest)
+        st.write(f"PL: ",np.round(best_profit_backtest,2))
