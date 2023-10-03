@@ -183,6 +183,5 @@ if uploaded_file:
 
         # Perform hill climbing to find the best sequence using backtesting
         best_sequence_backtest, best_profit_backtest = hill_climb_with_backtest(initial_sequence, backtest_instance=bt)
-
-        st.write(f"Best sequence:", best_sequence_backtest)
-        st.write(f"PL: ",np.round(best_profit_backtest,2))
+        st.write(f"Best sequence:, :blue[{','.join([str(seq) for seq in best_sequence_backtest])}]")
+        st.write(f"Best PL: :blue[{np.round(best_profit_backtest,2)}]")
