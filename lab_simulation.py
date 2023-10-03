@@ -169,4 +169,3 @@ def hill_climb_with_backtest(initial_sequence, iterations=10000, backtest_instan
 
         progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
     return current_sequence, best_profit
-
