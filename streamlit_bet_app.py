@@ -35,7 +35,7 @@ if uploaded_file:
     bt = BettingBacktest(df)
 
     columns_df = bt.df.columns
-    columns_df_lower = [col.lower() for col in columns_df]
+    columns_df_lower = [col.strip().lower() for col in columns_df]
     if 'sequence' in columns_df_lower:
         seq_idx = columns_df_lower.index('sequence')
         sequence_input_data = bt.df.loc[bt.df[columns_df[seq_idx]].notnull(), columns_df[seq_idx]].iloc[0]
