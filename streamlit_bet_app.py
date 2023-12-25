@@ -198,7 +198,7 @@ def page_1():
 
 
 def page_2():
-    st.title('OptimizeMyBet')
+    st.title('OptimizeMyLayBet')
 
     #file uploader
     uploaded_file = st.sidebar.file_uploader('Upload a file:', type=['csv', 'xlsx'])
