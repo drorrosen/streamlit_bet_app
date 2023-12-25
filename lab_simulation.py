@@ -290,6 +290,9 @@ def hill_climb_lay_betting(initial_sequence, iterations=10000, backtest_instance
             current_sequence = neighbor_sequence
             best_profit = neighbor_profit
 
+    progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
+
+
     return current_sequence, best_profit
 
 
