@@ -1,387 +1,303 @@
-import streamlit as st
 import pandas as pd
-from lab_simulation import *
-import io
-import xlsxwriter
+import numpy as np
+import streamlit as st
+import plotly.express as px
 import random
+from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
 
+class BettingBacktest:
+    def __init__(self, df):
+        self.df = df.dropna(subset=['Odds', 'Result', 'Stake'])
 
-# Set page configuration to wide layout
-st.set_page_config(layout="wide")
+    def count_Loss_streaks(self):
+        loss_streaks = {}
+        streak_count = 0
+        for result in self.df['Result']:
+            if result == 'Lost':
+                streak_count += 1
+            else:
+                if streak_count >0:
+                    loss_streaks[streak_count] = loss_streaks.get(streak_count,0) + 1
+                streak_count = 0
+        return loss_streaks
+
+    def backtest_sequence_xyz(self, sequence):
+        total_profit = 0
+        seq_idx = 0
+
+        # Add new columns for Sequence, Stakes, and PL
+        self.df['Sequence'] = None
+        #self.df['Stakes'] = None
+        self.df['PL'] = None
+
+        for idx, row in self.df.iterrows():
+            current_stake = float(row['Stake']) * sequence[seq_idx]
+            self.df.at[idx, 'Sequence'] = sequence[seq_idx]
+            #self.df.at[idx, 'Stakes'] = current_stake
+            if row['Result'] == 'Won':
+                profit = current_stake * (row['Odds'] - 1)
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = 0
+            else:
+                profit = -current_stake
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = min(len(sequence) -1, seq_idx+1)
+
+            total_profit += profit
+
+        return total_profit
+
+    def bootstrap_data(self, num_samples=100):
+        bootstrapped_samples = []
+        for _ in range(num_samples):
+            sample_df = self.df.sample(n=len(self.df), replace=True).reset_index(drop=True)
+            bootstrapped_samples.append(sample_df)
+        return bootstrapped_samples
+
+    @staticmethod
+    def calculate_risk_metrics(profits, confidence_level=0.95):
+        sorted_profits = sorted(profits)
+        var_index = int((1 - confidence_level) * len(sorted_profits))
+        var_value = sorted_profits[var_index]
+        cvar_value = np.mean(sorted_profits[:var_index+1])
+        return var_value, cvar_value
 
 
-def Intro():
-    st.title('Welcome the OptimizeMyBet Wep App')
+def plot_loss_streaks(loss_streaks):
+    df_loss_streaks = pd.DataFrame(list(loss_streaks.items()), columns=['Streak Length', 'Frequency'])
+    fig = px.bar(df_loss_streaks, x='Streak Length', y='Frequency')
+    fig.update_layout(
+        title_text='Lossing streaks',
+        xaxis_title='Streak Length',
+        yaxis_title='Frequency',
+        xaxis=dict(tickfont=dict(size=14)),
+        yaxis=dict(tickfont=dict(size=14))
+    )
 
-    st.write('This is a web app to optimize your bets')
-    st.write('The first page is the backtesting app')
-    st.write('The second page is the Lay betting app')
+    # Show plot using Streamlit
+    st.plotly_chart(fig)
 
-def page_1():
-    st.title('OptimizeMyBet')
+def plot_simulation_profits(profits):
+    fig = px.histogram(profits)
+    fig.update_layout(
+        title_text='Distribution of Bootstrapped Simulation Profits',
+        xaxis_title='Total Profit',
+        yaxis_title='Frequency',
+        xaxis=dict(tickfont=dict(size=14)),
+        yaxis=dict(tickfont=dict(size=14))
+    )
 
-    #file uploader
-    uploaded_file = st.sidebar.file_uploader('Upload a file:', type=['csv', 'xlsx'])
-    if uploaded_file:
-        if uploaded_file.type == 'text/csv':
-            import pandas as pd
-
-            df = pd.read_csv(uploaded_file)
-            if st.checkbox('Show original data:'):
-                st.dataframe(df)
+    # Show plot using Streamlit
+    st.plotly_chart(fig)
 
 
+def generate_limited_random_sequence(min_length=3, max_length=15, value_ranges=[(1, 20), (25, 100, 5)]):
+    """
+    Generate a random sequence of integers within specified value ranges and varying length.
+    The first number in the sequence is always 1.
+
+    Parameters:
+    - min_length: Minimum length of the sequence
+    - max_length: Maximum length of the sequence
+    - value_ranges: List of tuples specifying the ranges for random values.
+                    Each tuple can be (min_value, max_value) or (min_value, max_value, step)
+
+    Returns:
+    A list of integers representing the sequence
+    """
+    # The first number in the sequence must be 1
+    sequence = [1]
+
+    # Determine the length of this sequence
+    sequence_length = random.randint(min_length, max_length)
+
+    # Generate the remaining numbers in the sequence
+    for _ in range(sequence_length - 1):
+        # Randomly pick a value range
+        value_range = random.choice(value_ranges)
+
+        if len(value_range) == 2:
+            # Generate a random value within this range
+            sequence.append(random.randint(value_range[0], value_range[1]))
         else:
-            import pandas as pd
-            df = pd.read_excel(uploaded_file)
-            if st.checkbox('Show original data:'):
-                st.dataframe(df)
+            # Generate a random value within this range with the specified step
+            sequence.append(random.randrange(value_range[0], value_range[1] + 1, value_range[2]))
 
-        bt = BettingBacktest(df)
+    return sequence
 
-        columns_df = bt.df.columns
-        columns_df_lower = [col.lower() for col in columns_df]
-        if 'sequence' in columns_df_lower:
-            seq_idx = columns_df_lower.index('sequence')
-            sequence_input_data = bt.df.loc[bt.df[columns_df[seq_idx]].notnull(), columns_df[seq_idx]].iloc[0]
-            st.write(f"Sequence input from the file:", sequence_input_data)
-        else:
-            sequence_input_data = None
 
-        counts_losses = bt.count_Loss_streaks()
-        plot_loss_streaks(counts_losses)
 
+# Modify the hill climbing function to use the backtest_sequence_xyz method for evaluation
+def hill_climb_with_backtest(initial_sequence, iterations=10000, backtest_instance=None):
+    """
+    Perform hill climbing to find the sequence that maximizes profit using backtesting.
 
-    st.sidebar.header('User Input Parameters')
+    Parameters:
+    - initial_sequence: The initial betting sequence
+    - iterations: The number of iterations to perform
+    - backtest_instance: An instance of the BettingBacktest class for backtesting sequences
 
+    Returns:
+    The sequence that results in the highest profit according to backtesting
+    """
+    # Initialize variables
+    current_sequence = initial_sequence
+    best_profit = backtest_instance.backtest_sequence_xyz(current_sequence) if backtest_instance else 0
 
-    st.divider()
+    progress_text = st.empty()
+    # Perform hill climbing
+    for i in tqdm(range(iterations), desc='Processing'):
+        # Generate a neighbor by perturbing the current sequence
+        neighbor_sequence = current_sequence[:]
+        action = random.choice(["add", "remove", "change"])
 
+        if action == "add":
+            neighbor_sequence.append(random.randint(1, 100))
+        elif action == "remove" and len(neighbor_sequence) > 1:
+            del neighbor_sequence[random.randint(1, len(neighbor_sequence) - 1)]
+        elif action == "change" and len(neighbor_sequence) > 1:
+            neighbor_sequence[random.randint(1, len(neighbor_sequence) - 1)] = random.randint(1, 100)
 
-    if uploaded_file:
+        # Evaluate the neighbor using backtest_sequence_xyz
+        neighbor_profit = backtest_instance.backtest_sequence_xyz(neighbor_sequence) if backtest_instance else 0
 
+        # If the neighbor is better, move to the neighbor state
+        if neighbor_profit > best_profit:
+            current_sequence = neighbor_sequence
+            best_profit = neighbor_profit
 
-        st.subheader('User input parameters')
+        progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
+    return current_sequence, best_profit
 
-        odds_options = ['User input parameter', 'Data input']
-        odds_bar = st.sidebar.radio('Choose Odds', odds_options)
-        if odds_bar == 'User input parameter':
-            odds = st.sidebar.number_input('Odds')
-            st.write(f"Odds input:", odds)
-        else:
-            odds = 'odds_from_file'
-            st.write("Odds inputs from the file")
 
-        stake_input = st.sidebar.number_input('Stake')
-        st.write(f"Stake input:", stake_input)
 
 
-        sequence_options = ['User input parameter', 'Data input']
-        sequence_bar = st.sidebar.radio('Choose Sequence', sequence_options)
-        if (sequence_bar == 'User input parameter'):
-            sequence_input = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
-            st.write(f"Sequence input:", sequence_input)
-        elif sequence_input_data is not None:
-                sequence_input = sequence_input_data
-                st.write(f"Sequence input:", sequence_input)
 
+class LayBettingBacktest:
+    def __init__(self, df):
+        """
+        Calculates the total profit from a backtest of a lay betting sequence.
 
-        else:
-                sequence_input = st.sidebar.text_input('No Sequence column was found in the file. Enter Sequence here:', value="1,2,3,4,5,6")
-                st.write(f"Sequence input:", sequence_input)
+        Parameters:
+            sequence (list): A list of decimal values representing the stake multiplier for each bet in the sequence.
 
+        Returns:
+            float: The total profit from the backtest.
+"""
+        self.df = df.dropna(subset=['Odds', 'Result', 'Stake'])
 
+    def backtest_lay_sequence(self, sequence):
+        total_profit = 0
+        seq_idx = 0
 
-        results = {'sequence':[float(seq) for seq in sequence_input.split(',')],
-                       'stake':stake_input,
-                       'odds':odds}
+        # Add new columns for Sequence and PL
+        self.df['Sequence'] = None
+        self.df['PL'] = None
 
-    st.divider()
-    st.subheader('Run Simulations and backtesting to provide with more statistics')
-    clicked = st.button('Begin Simulation and Backtesting:')
-    if clicked:
-        if uploaded_file:
-            #Bootstrapping and backtesting
+        for idx, row in self.df.iterrows():
+            current_stake = float(row['Stake']) * sequence[seq_idx]
+            self.df.at[idx, 'Sequence'] = sequence[seq_idx]
 
-            bt = BettingBacktest(df)
+            if row['Result'] == 'Won':
+                # In lay betting, if the outcome is 'Won', it's a loss for the bettor
+                profit = -current_stake * (row['Odds'] - 1)
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = min(len(sequence) - 1, seq_idx + 1)  # Move to the next step in the sequence
+            else:
+                # If the outcome is 'Lost', it's a win for the bettor
+                profit = current_stake
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = 0  # Reset the sequence as it's a win for the bettor
 
-            if results['odds'] != 'odds_from_file':
-                bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-            bt.df['Stake'] = bt.df['Stake'].astype(float)
+            total_profit += profit
 
+        return total_profit
 
-            bootstrapped_dfs = bt.bootstrap_data(num_samples=1000)
-            profits = []
-            for sample_df in bootstrapped_dfs:
-                sample_bt = BettingBacktest(sample_df)
-                profit = sample_bt.backtest_sequence_xyz(results['sequence'])
-                profits.append(profit)
-            plot_simulation_profits(profits)
-            st.write(f"The profit average over 1000 simulations is: {np.round(np.mean(profits),2)}")
-            st.write(f"The profit median over 1000 simulations is: {np.round(np.median(profits),2)}")
-            st.write(f"The profit standard deviation over 1000 simulations is: {np.round(np.std(profits),2)}")
 
-            var, cvar = BettingBacktest.calculate_risk_metrics(profits)
 
-            st.write(f"The Value-at-Risk (VaR) on the simulated profits is: {np.round(var,2)}")
-            st.write(f"The Conditional Value-at-Risk (VaR) is: {np.round(cvar,2)}")
+    def count_Loss_streaks(self):
+        loss_streaks = {}
+        streak_count = 0
+        for result in self.df['Result']:
+            if result == 'Won':
+                streak_count += 1
+            else:
+                if streak_count >0:
+                    loss_streaks[streak_count] = loss_streaks.get(streak_count,0) + 1
+                streak_count = 0
+        return loss_streaks
 
 
-    st.divider()
+    def bootstrap_data(self, num_samples=100):
+        bootstrapped_samples = []
+        for _ in range(num_samples):
+            sample_df = self.df.sample(n=len(self.df), replace=True).reset_index(drop=True)
+            bootstrapped_samples.append(sample_df)
+        return bootstrapped_samples
 
-    st.subheader('Running Backtesting and creating a file to download')
+    @staticmethod
+    def calculate_risk_metrics(profits, confidence_level=0.95):
+        sorted_profits = sorted(profits)
+        var_index = int((1 - confidence_level) * len(sorted_profits))
+        var_value = sorted_profits[var_index]
+        cvar_value = np.mean(sorted_profits[:var_index+1])
+        return var_value, cvar_value
 
-    if uploaded_file:
-        clicked = st.button('Begin Backtesting and creating downloaded file')
-        if clicked:
-            bt = BettingBacktest(df)
 
-            if results['odds'] != 'odds_from_file':
-                bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-            bt.df['Stake'] = bt.df['Stake'].astype(float)
 
 
 
-            result = bt.backtest_sequence_xyz(results['sequence'])
-            bt.df['Stakes'] = results['stake']
-            bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stake','Result', 'PL']]
-            st.write(bt.df)
-            st.write('Total PL: ', np.round(bt.df['PL'].sum(),2))
 
-            # Create a download button
 
-            # Write the DataFrame to a BytesIO object
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                bt.df.to_excel(writer, sheet_name='Sheet1', index=False)
 
-            st.download_button(
-                label="Download Excel File",
-                data=output,
-                file_name="my_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-            )
 
-    st.divider()
 
-    st.subheader('Backtesting Sequence Finder')
 
 
-    if uploaded_file:
-        clicked = st.button('OptimizeMyBet Sequence Finder')
-        if clicked:
-            bt = BettingBacktest(df)
-            if results['odds'] != 'odds_from_file':
-             bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-                bt.df['Stake'] = bt.df['Stake'].astype(float)
+def hill_climb_lay_betting(initial_sequence, iterations=10000, backtest_instance=None):
+    """
+    Generate the function comment for the hill_climb_lay_betting function.
 
-            # Initialize the progress bar
-            progress_bar = st.progress(0)
-            # Initialize a random sequence
-            initial_sequence = generate_limited_random_sequence()
+    Parameters:
+    - initial_sequence (list): The initial betting sequence.
+    - iterations (int): The number of iterations to perform.
+    - backtest_instance (object): An optional backtest instance.
 
-            # Perform hill climbing to find the best sequence using backtesting
-            best_sequence_backtest, best_profit_backtest = hill_climb_with_backtest(initial_sequence, backtest_instance=bt)
-            st.write(f"Best sequence:, :blue[{','.join([str(seq) for seq in best_sequence_backtest])}]")
-            st.write(f"Best PL: :blue[{np.round(best_profit_backtest,2)}]")
+    Returns:
+    - tuple: A tuple containing the final betting sequence and the best profit achieved.
+    """
+    current_sequence = initial_sequence
+    best_profit = backtest_instance.backtest_lay_sequence(current_sequence) if backtest_instance else 0
 
+    progress_text = st.empty()
 
 
-def page_2():
-    st.title('OptimizeMyLayBet')
+    for i in tqdm(range(iterations), desc='Processing'):
+        neighbor_sequence = current_sequence[:]
+        action = random.choice(["add", "remove", "change"])
 
-    #file uploader
-    uploaded_file = st.sidebar.file_uploader('Upload a file:', type=['csv', 'xlsx'])
-    if uploaded_file:
-        if uploaded_file.type == 'text/csv':
-            import pandas as pd
+        if action == "add":
+            neighbor_sequence.append(random.randint(1, 100))
+        elif action == "remove" and len(neighbor_sequence) > 1:
+            del neighbor_sequence[random.randint(0, len(neighbor_sequence) - 1)]
+        elif action == "change" and len(neighbor_sequence) > 1:
+            neighbor_sequence[random.randint(0, len(neighbor_sequence) - 1)] = random.randint(1, 100)
 
-            df = pd.read_csv(uploaded_file)
-            if st.checkbox('Show original data:'):
-                st.dataframe(df)
+        neighbor_profit = backtest_instance.backtest_lay_sequence(neighbor_sequence) if backtest_instance else 0
 
+        if neighbor_profit > best_profit:
+            current_sequence = neighbor_sequence
+            best_profit = neighbor_profit
 
-        else:
-            import pandas as pd
-            df = pd.read_excel(uploaded_file)
-            if st.checkbox('Show original data:'):
-                st.dataframe(df)
+        progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
 
-        bt = LayBettingBacktest(df)
 
-        columns_df = bt.df.columns
-        columns_df_lower = [col.lower() for col in columns_df]
-        if 'sequence' in columns_df_lower:
-            seq_idx = columns_df_lower.index('sequence')
-            sequence_input_data = bt.df.loc[bt.df[columns_df[seq_idx]].notnull(), columns_df[seq_idx]].iloc[0]
-            st.write(f"Sequence input from the file:", sequence_input_data)
-        else:
-            sequence_input_data = None
+    return current_sequence, best_profit
 
-        counts_losses = bt.count_Loss_streaks()
-        plot_loss_streaks(counts_losses)
 
 
-    st.sidebar.header('User Input Parameters')
 
-
-    st.divider()
-
-
-    if uploaded_file:
-
-
-        st.subheader('User input parameters')
-
-        odds_options = ['User input parameter', 'Data input']
-        odds_bar = st.sidebar.radio('Choose Odds', odds_options)
-        if odds_bar == 'User input parameter':
-            odds = st.sidebar.number_input('Odds')
-            st.write(f"Odds input:", odds)
-        else:
-            odds = 'odds_from_file'
-            st.write("Odds inputs from the file")
-
-        stake_input = st.sidebar.number_input('Stake')
-        st.write(f"Stake input:", stake_input)
-
-
-        sequence_options = ['User input parameter', 'Data input']
-        sequence_bar = st.sidebar.radio('Choose Sequence', sequence_options)
-        if (sequence_bar == 'User input parameter'):
-            sequence_input = st.sidebar.text_input('Enter Sequence here:', value="1,2,3,4,5,6")
-            st.write(f"Sequence input:", sequence_input)
-        elif sequence_input_data is not None:
-            sequence_input = sequence_input_data
-            st.write(f"Sequence input:", sequence_input)
-
-
-        else:
-            sequence_input = st.sidebar.text_input('No Sequence column was found in the file. Enter Sequence here:', value="1,2,3,4,5,6")
-            st.write(f"Sequence input:", sequence_input)
-
-
-
-        results = {'sequence':[float(seq) for seq in sequence_input.split(',')],
-                   'stake':stake_input,
-                   'odds':odds}
-
-    st.divider()
-    st.subheader('Run Simulations and lay betting to provide with more statistics')
-    clicked = st.button('Begin Simulation and Backtesting:')
-    if clicked:
-        if uploaded_file:
-            #Bootstrapping and backtesting
-
-            bt = LayBettingBacktest(df)
-
-            if results['odds'] != 'odds_from_file':
-                bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-            bt.df['Stake'] = bt.df['Stake'].astype(float)
-
-
-            bootstrapped_dfs = bt.bootstrap_data(num_samples=1000)
-            profits = []
-            for sample_df in bootstrapped_dfs:
-                sample_bt = LayBettingBacktest(sample_df)
-                profit = sample_bt.backtest_lay_sequence(results['sequence'])
-                profits.append(profit)
-            plot_simulation_profits(profits)
-            st.write(f"The profit average over 1000 simulations is: {np.round(np.mean(profits),2)}")
-            st.write(f"The profit median over 1000 simulations is: {np.round(np.median(profits),2)}")
-            st.write(f"The profit standard deviation over 1000 simulations is: {np.round(np.std(profits),2)}")
-
-            var, cvar = LayBettingBacktest.calculate_risk_metrics(profits)
-
-            st.write(f"The Value-at-Risk (VaR) on the simulated profits is: {np.round(var,2)}")
-            st.write(f"The Conditional Value-at-Risk (VaR) is: {np.round(cvar,2)}")
-
-
-    st.divider()
-
-    st.subheader('Running lay betting and creating a file to download')
-
-    if uploaded_file:
-        clicked = st.button('Begin Backtesting and creating downloaded file')
-        if clicked:
-            bt = LayBettingBacktest(df)
-
-            if results['odds'] != 'odds_from_file':
-                bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-            bt.df['Stake'] = bt.df['Stake'].astype(float)
-
-
-
-            result = bt.backtest_lay_sequence(results['sequence'])
-            bt.df['Stakes'] = results['stake']
-            bt.df = bt.df[['Time', 'Race', 'Selection', 'BetType', 'Odds', 'Sequence', 'Stake','Result', 'PL']]
-            st.write(bt.df)
-            st.write('Total PL: ', np.round(bt.df['PL'].sum(),2))
-
-            # Create a download button
-
-            # Write the DataFrame to a BytesIO object
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                bt.df.to_excel(writer, sheet_name='Sheet1', index=False)
-
-            st.download_button(
-                label="Download Excel File",
-                data=output,
-                file_name="my_data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-            )
-
-    st.divider()
-
-    st.subheader('Lay Betting Sequence Finder')
-
-
-    if uploaded_file:
-        clicked = st.button('OptimizeMyBet Sequence Finder')
-        if clicked:
-            bt = LayBettingBacktest(df)
-            if results['odds'] != 'odds_from_file':
-                bt.df['Odds'] = results['odds']
-            if results['stake'] != 'stakes_from_file':
-                bt.df['Stake'] = results['stake']
-                bt.df['Stake'] = bt.df['Stake'].astype(float)
-
-            # Initialize the progress bar
-            progress_bar = st.progress(0)
-            # Initialize a random sequence
-            initial_sequence = generate_limited_random_sequence()
-
-            # Perform hill climbing to find the best sequence using backtesting
-            best_sequence_backtest, best_profit_backtest = hill_climb_lay_betting(initial_sequence, backtest_instance=bt)
-            st.write(f"Best sequence:, :blue[{','.join([str(seq) for seq in best_sequence_backtest])}]")
-            st.write(f"Best PL: :blue[{np.round(best_profit_backtest,2)}]")
-
-
-
-
-page_names_to_funcs = {
-    "Introduction": Intro,
-    "OptimizeMyBet": page_1,
-    "OptimizeMyLayBet": page_2,
-
-}
-
-dashboard_name = st.sidebar.selectbox("Choose a page", page_names_to_funcs.keys())
-page_names_to_funcs[dashboard_name]()
-#%%
