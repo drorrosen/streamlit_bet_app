@@ -273,6 +273,9 @@ def hill_climb_lay_betting(initial_sequence, iterations=10000, backtest_instance
     current_sequence = initial_sequence
     best_profit = backtest_instance.backtest_lay_sequence(current_sequence) if backtest_instance else 0
 
+    progress_text = st.empty()
+
+
     for i in tqdm(range(iterations), desc='Processing'):
         neighbor_sequence = current_sequence[:]
         action = random.choice(["add", "remove", "change"])
@@ -290,7 +293,7 @@ def hill_climb_lay_betting(initial_sequence, iterations=10000, backtest_instance
             current_sequence = neighbor_sequence
             best_profit = neighbor_profit
 
-    progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
+        progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
 
 
     return current_sequence, best_profit
