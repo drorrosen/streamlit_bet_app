@@ -172,3 +172,126 @@ def hill_climb_with_backtest(initial_sequence, iterations=10000, backtest_instan
         progress_text.text(f"Progress: {np.round((i+1)/iterations*100,2)}%")
     return current_sequence, best_profit
 
+
+
+
+
+class LayBettingBacktest:
+    def __init__(self, df):
+        """
+        Calculates the total profit from a backtest of a lay betting sequence.
+
+        Parameters:
+            sequence (list): A list of decimal values representing the stake multiplier for each bet in the sequence.
+
+        Returns:
+            float: The total profit from the backtest.
+"""
+        self.df = df.dropna(subset=['Odds', 'Result', 'Stake'])
+
+    def backtest_lay_sequence(self, sequence):
+        total_profit = 0
+        seq_idx = 0
+
+        # Add new columns for Sequence and PL
+        self.df['Sequence'] = None
+        self.df['PL'] = None
+
+        for idx, row in self.df.iterrows():
+            current_stake = float(row['Stake']) * sequence[seq_idx]
+            self.df.at[idx, 'Sequence'] = sequence[seq_idx]
+
+            if row['Result'] == 'Won':
+                # In lay betting, if the outcome is 'Won', it's a loss for the bettor
+                profit = -current_stake * (row['Odds'] - 1)
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = min(len(sequence) - 1, seq_idx + 1)  # Move to the next step in the sequence
+            else:
+                # If the outcome is 'Lost', it's a win for the bettor
+                profit = current_stake
+                self.df.at[idx, 'PL'] = profit
+                seq_idx = 0  # Reset the sequence as it's a win for the bettor
+
+            total_profit += profit
+
+        return total_profit
+
+
+
+    def count_Loss_streaks(self):
+        loss_streaks = {}
+        streak_count = 0
+        for result in self.df['Result']:
+            if result == 'Won':
+                streak_count += 1
+            else:
+                if streak_count >0:
+                    loss_streaks[streak_count] = loss_streaks.get(streak_count,0) + 1
+                streak_count = 0
+        return loss_streaks
+
+
+    def bootstrap_data(self, num_samples=100):
+        bootstrapped_samples = []
+        for _ in range(num_samples):
+            sample_df = self.df.sample(n=len(self.df), replace=True).reset_index(drop=True)
+            bootstrapped_samples.append(sample_df)
+        return bootstrapped_samples
+
+    @staticmethod
+    def calculate_risk_metrics(profits, confidence_level=0.95):
+        sorted_profits = sorted(profits)
+        var_index = int((1 - confidence_level) * len(sorted_profits))
+        var_value = sorted_profits[var_index]
+        cvar_value = np.mean(sorted_profits[:var_index+1])
+        return var_value, cvar_value
+
+
+
+
+
+
+
+
+
+
+
+
+
+def hill_climb_lay_betting(initial_sequence, iterations=10000, backtest_instance=None):
+    """
+    Generate the function comment for the hill_climb_lay_betting function.
+
+    Parameters:
+    - initial_sequence (list): The initial betting sequence.
+    - iterations (int): The number of iterations to perform.
+    - backtest_instance (object): An optional backtest instance.
+
+    Returns:
+    - tuple: A tuple containing the final betting sequence and the best profit achieved.
+    """
+    current_sequence = initial_sequence
+    best_profit = backtest_instance.backtest_lay_sequence(current_sequence) if backtest_instance else 0
+
+    for i in range(iterations):
+        neighbor_sequence = current_sequence[:]
+        action = random.choice(["add", "remove", "change"])
+
+        if action == "add":
+            neighbor_sequence.append(random.randint(1, 100))
+        elif action == "remove" and len(neighbor_sequence) > 1:
+            del neighbor_sequence[random.randint(0, len(neighbor_sequence) - 1)]
+        elif action == "change" and len(neighbor_sequence) > 1:
+            neighbor_sequence[random.randint(0, len(neighbor_sequence) - 1)] = random.randint(1, 100)
+
+        neighbor_profit = backtest_instance.backtest_lay_sequence(neighbor_sequence) if backtest_instance else 0
+
+        if neighbor_profit > best_profit:
+            current_sequence = neighbor_sequence
+            best_profit = neighbor_profit
+
+    return current_sequence, best_profit
+
+
+
+
